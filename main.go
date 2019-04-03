@@ -4,25 +4,28 @@
 package main
 
 import (
-	"context"
 	"os"
 
-	"github.com/rancher/axe/pkg/server"
-	"github.com/rancher/norman"
-	"github.com/rancher/norman/pkg/resolvehome"
-	"github.com/rancher/norman/signal"
+	"github.com/rancher/axe/axe"
+	"github.com/rancher/axe/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-var (
-	VERSION = "v0.0.0-dev"
-)
+func init() {
+	file, err := os.Create("axe.logs")
+	if err != nil {
+		panic(err)
+	}
+	logrus.SetOutput(file)
+}
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "axe"
-	app.Version = VERSION
+	app.Version = version.VERSION
 	app.Usage = "axe needs help!"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -39,22 +42,18 @@ func main() {
 }
 
 func run(c *cli.Context) error {
-	logrus.Info("Starting controller")
-	ctx := signal.SigTermCancelContext(context.Background())
+	kubeconfig := c.String("kubeconfig")
+	os.Setenv("KUBECONFIG", kubeconfig)
 
-	kubeConfig, err := resolvehome.Resolve(c.String("kubeconfig"))
+	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return err
 	}
+	clientset := kubernetes.NewForConfigOrDie(restConfig)
 
-	ctx, _, err = server.Config().Build(ctx, &norman.Options{
-		K8sMode:    "external",
-		KubeConfig: kubeConfig,
-	})
-
-	if err != nil {
+	app := axe.NewAppView(clientset)
+	if err := app.Init(); err != nil {
 		return err
 	}
-	<-ctx.Done()
-	return nil
+	return app.Run()
 }
