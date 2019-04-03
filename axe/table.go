@@ -246,3 +246,7 @@ func (t *tableView) SwitchPage(page string, draw tview.Primitive) {
 func (t *tableView) GetTable() *tview.Table {
 	return t.Table
 }
+
+func (t tableView) BackPage() {
+	t.app.LastPage()
+}

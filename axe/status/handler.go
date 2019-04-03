@@ -18,5 +18,6 @@ type GenericDrawer interface {
 	GetAction() []action.Action
 	GetTable() *tview.Table
 	SwitchPage(page string, draw tview.Primitive)
+	BackPage()
 	SwitchToRootPage()
 }
