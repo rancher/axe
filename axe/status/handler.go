@@ -19,6 +19,7 @@ type GenericDrawer interface {
 	GetTable() *tview.Table
 	SwitchPage(page string, draw tview.Primitive)
 	BackPage()
+	RootPage() tview.Primitive
 	SwitchToRootPage()
 	Refresh()
 	UpdateWithSearch(search string)

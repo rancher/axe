@@ -87,8 +87,6 @@ var (
 						app.showMenu = false
 					}
 				}
-			case tcell.KeyEscape:
-				app.LastPage()
 			}
 			return event
 		}
@@ -101,6 +99,7 @@ var (
 				if err := ResourceView(h); err != nil {
 					h.UpdateStatus(err.Error(), true)
 				}
+			case
 			}
 			return event
 		}
@@ -249,5 +248,5 @@ func viewResource(h status.GenericDrawer) {
 	feeder := datafeeder.NewDataFeeder(w.RefreshResource)
 	newTable := NewTableViewWithArgs(h.(*tableView).app, rkind, feeder, nil, itemEventHandler)
 	newTable.app.tableViews[w.Name] = newTable
-	h.SwitchPage(w.Name, newTable)
+	h.SwitchPage(h.GetCurrentPage(), newTable)
 }

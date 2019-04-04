@@ -36,6 +36,19 @@ var (
 		}
 		return nil
 	}
+
+	PodRefresher = func(name string) func(b *bytes.Buffer) error {
+		return func(b *bytes.Buffer) error {
+			cmd := exec.Command("rio", "ps", "-c", name)
+			errBuffer := &strings.Builder{}
+			cmd.Stdout = b
+			cmd.Stderr = errBuffer
+			if err := cmd.Run(); err != nil {
+				return errors.New(errBuffer.String())
+			}
+			return nil
+		}
+	}
 )
 
 

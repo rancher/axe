@@ -75,6 +75,7 @@ func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafee
 		t.Table.SetSelectable(true, false)
 		t.Table.SetTitle(t.resourceKind.Title)
 	}
+	//
 	if t.sync == nil {
 		t.sync = make(chan struct{}, 0)
 	}
@@ -96,7 +97,9 @@ func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafee
 		}
 	})
 
-	t.SetInputCapture(h(t))
+	if h != nil {
+		t.SetInputCapture(h(t))
+	}
 }
 
 func (t *tableView) run(ctx context.Context) {
@@ -155,8 +158,8 @@ func (t *tableView) draw() {
 		}
 		for col, value := range row {
 			t.addBodyCell(r, col, value)
-			r++
 		}
+		r++
 	}
 	if t.search != "" {
 		t.search = ""
@@ -185,7 +188,7 @@ func (t *tableView) addBodyCell(row, col int, value string) {
 
 func (t *tableView) InsertDialog(name string, page tview.Primitive, dialog tview.Primitive) {
 	newpage := tview.NewPages()
-	newpage.AddPage(name, t.app.CurrentPage(), true, true).
+	newpage.AddPage(name, page, true, true).
 		AddPage("dialog", center(dialog, 40, 15), true, true)
 	t.app.SwitchPage(t.app.currentPage, newpage)
 	t.app.Application.SetFocus(dialog)
@@ -296,4 +299,8 @@ func (t *tableView) Navigate(r rune) {
 		}
 		app.SwitchPage(kind, app.tableViews[kind])
 	}
+}
+
+func (t *tableView) RootPage() tview.Primitive {
+	return t.app.tableViews[t.app.currentPage]
 }

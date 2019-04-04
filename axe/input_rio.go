@@ -26,6 +26,7 @@ import (
 const (
 	serviceKind         = "services"
 	routeKind           = "routes"
+	podKind             = "pods"
 	externalServiceKind = "externalservices"
 
 	stackLabel   = "rio.cattle.io/stack"
@@ -56,6 +57,8 @@ var (
 		{"Key n", "Create"},
 		{"Key d", "Delete"},
 		{"Key r", "Refresh"},
+		{"Key /", "Search"},
+		{"Key p", "View Pods"},
 	}
 
 	Footers = []resourceView{
@@ -74,16 +77,6 @@ var (
 	PageNav = map[rune]string{
 		'1': serviceKind,
 		'2': routeKind,
-	}
-
-	EscapeEventHandler = func(app *AppView) func(event *tcell.EventKey) *tcell.EventKey {
-		return func(event *tcell.EventKey) *tcell.EventKey {
-			 if event.Key() == tcell.KeyEscape {
-				app.showMenu = false
-				app.SwitchPage(app.currentPage, app.CurrentPage())
-			}
-			return event
-		}
 	}
 
 	tableEventHandler = func(h status.GenericDrawer) func(event *tcell.EventKey) *tcell.EventKey {
@@ -109,25 +102,14 @@ var (
 					h.ShowMenu()
 				default:
 					h.Navigate(event.Rune())
+				case 'p':
+					ViewPods(h)
 				}
 			}
 			return event
 		}
 	}
 
-	searchDoneEventHandler = func(app *AppView, h status.GenericDrawer) func(key tcell.Key) {
-		return func(key tcell.Key) {
-			switch key {
-			case tcell.KeyEscape:
-				app.SetFocus(app.content)
-				app.searchView.InputField.SetText("")
-			case tcell.KeyEnter:
-				h.UpdateWithSearch(app.searchView.InputField.GetText())
-				app.searchView.InputField.SetText("")
-				h.Refresh()
-			}
-		}
-	}
 
 
 	Route = ResourceKind{
@@ -168,19 +150,31 @@ var (
 		},
 	}
 
+	execAndlog = []action.Action{
+		{
+			Name:        "exec",
+			Shortcut:    'x',
+			Description: "exec into a container or service",
+		},
+		{
+			Name:        "log",
+			Shortcut:    'l',
+			Description: "view logs of a service",
+		},
+	}
+
 	ViewMap = map[string]View{
 		serviceKind: {
-			Actions: append(DefaultAction,
-				action.Action{
-					Name:        "exec",
-					Shortcut:    'x',
-					Description: "exec into a container or service",
-				},
-				action.Action{
-					Name:        "log",
-					Shortcut:    'l',
-					Description: "view logs of a service",
-				}),
+			Actions: append(
+				DefaultAction,
+				append(
+					execAndlog,
+					action.Action{
+						Name:        "pods",
+						Shortcut:    'p',
+						Description: "view pods of a service",
+					})...,
+			),
 			Kind:   Service,
 			Feeder: datafeeder.NewDataFeeder(rio.ServiceRefresher),
 		},
@@ -235,6 +229,8 @@ func ActionView(h status.GenericDrawer) {
 				Exec(s, h)
 			})
 			h.InsertDialog("exec-containers", h.GetCurrentPrimitive(), list)
+		case "pods":
+			ViewPods(h)
 		case "delete":
 			Rm(h)
 		}
@@ -406,6 +402,47 @@ func Rm(h status.GenericDrawer) {
 			}
 		})
 	h.InsertDialog("delete", h.GetCurrentPrimitive(), modal)
+}
+
+func ViewPods(h status.GenericDrawer) {
+	name := h.GetSelectionName()
+	app := h.(*tableView).app
+
+	rkind := ResourceKind{
+		Kind:  podKind,
+		Title: "Pods",
+	}
+
+	var podEventHandler = func(h status.GenericDrawer) func(event *tcell.EventKey) *tcell.EventKey {
+		return func(event *tcell.EventKey) *tcell.EventKey {
+			switch event.Key() {
+			case tcell.KeyEnter:
+				ActionView(h)
+			case tcell.KeyRune:
+				switch event.Rune() {
+				case 'i':
+					Inspect("yaml", defaultStyle, false, h)
+				case 'l':
+					Logs("", h)
+				case 'x':
+					Exec("", h)
+				case 'r':
+					h.Refresh()
+				case '/':
+					h.ShowSearch()
+				case 'm':
+					h.ShowMenu()
+				default:
+					h.Navigate(event.Rune())
+				}
+			}
+			return event
+		}
+	}
+
+	feeder := datafeeder.NewDataFeeder(rio.PodRefresher(name))
+	table := NewTableViewWithArgs(app, rkind, feeder, DefaultAction, podEventHandler)
+	h.SwitchPage(h.GetCurrentPage(), table)
 }
 
 func clearScreen() {
