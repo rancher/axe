@@ -2,10 +2,11 @@ package axe
 
 import (
 	"fmt"
-	"github.com/rancher/axe/axe/status"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rancher/axe/axe/status"
 
 	"github.com/gdamore/tcell"
 	"github.com/rancher/axe/axe/action"
@@ -27,9 +28,10 @@ type tableView struct {
 	data         []interface{}
 	dataSource   datafeeder.DataSource
 	lock         sync.Mutex
-	sync         <-chan struct{}
+	sync         chan struct{}
 	actions      []action.Action
 	resourceKind ResourceKind
+	search       string
 }
 
 type EventHandler func(h status.GenericDrawer) func(event *tcell.EventKey) *tcell.EventKey
@@ -73,6 +75,10 @@ func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafee
 		t.Table.SetSelectable(true, false)
 		t.Table.SetTitle(t.resourceKind.Title)
 	}
+	if t.sync == nil {
+		t.sync = make(chan struct{}, 0)
+	}
+
 	if p, ok := t.app.pageRows[t.resourceKind.Kind]; ok {
 		t.Table.Select(p.row, p.column)
 	}
@@ -94,18 +100,17 @@ func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafee
 }
 
 func (t *tableView) run(ctx context.Context) {
-	go func() {
-		for {
-			select {
-			case <-t.sync:
-				if err := t.refresh(); err != nil {
-					t.UpdateStatus(err.Error(), true)
-				}
-			case <-ctx.Done():
-				return
+	for {
+		select {
+		case <-t.sync:
+			if err := t.refresh(); err != nil {
+				t.UpdateStatus(err.Error(), true)
 			}
+			t.SwitchPage(t.app.currentPage, t)
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
 func (t *tableView) GetSelectionName() string {
@@ -116,8 +121,7 @@ func (t *tableView) GetSelectionName() string {
 }
 
 func (t *tableView) SwitchToRootPage() {
-	t.app.SwitchPage(t.app.currentPage, t.app.CurrentPage())
-	t.app.Application.Draw()
+	t.app.SwitchToRootPage()
 }
 
 func (t *tableView) refresh() error {
@@ -127,12 +131,11 @@ func (t *tableView) refresh() error {
 	if err := t.dataSource.Refresh(); err != nil {
 		return err
 	}
-
-	t.drawTable()
+	t.draw()
 	return nil
 }
 
-func (t *tableView) drawTable() {
+func (t *tableView) draw() {
 	t.Clear()
 
 	header := t.dataSource.Header()
@@ -142,13 +145,21 @@ func (t *tableView) drawTable() {
 		t.addHeaderCell(col, name)
 	}
 
-	for r, row := range data {
+	r := 0
+	for _, row := range data {
 		if len(row) > 0 && row[0] == "" {
+			continue
+		}
+		if t.search != "" && !strings.Contains(strings.Join(row, ""), t.search) {
 			continue
 		}
 		for col, value := range row {
 			t.addBodyCell(r, col, value)
+			r++
 		}
+	}
+	if t.search != "" {
+		t.search = ""
 	}
 	t.GetApplication().Draw()
 }
@@ -160,7 +171,7 @@ func (t *tableView) addHeaderCell(col int, name string) {
 		c.SetTextColor(tcell.ColorAntiqueWhite)
 		c.SetAttributes(tcell.AttrBold)
 	}
-	t.SetCell(0, col, c)
+	t.Table.SetCell(0, col, c)
 }
 
 func (t *tableView) addBodyCell(row, col int, value string) {
@@ -169,7 +180,7 @@ func (t *tableView) addBodyCell(row, col int, value string) {
 		c.SetExpansion(1)
 		c.SetTextColor(tcell.ColorAntiqueWhite)
 	}
-	t.SetCell(row+1, col, c)
+	t.Table.SetCell(row+1, col, c)
 }
 
 func (t *tableView) InsertDialog(name string, page tview.Primitive, dialog tview.Primitive) {
@@ -198,17 +209,17 @@ func (t *tableView) UpdateStatus(status string, isError bool) tview.Primitive {
 	}
 	statusBar.SetText(status)
 	statusBar.SetTextAlign(tview.AlignCenter)
-	newpage := tview.NewPages().
-		AddPage("status", t.app.tableViews[t.app.currentPage], true, true).
-		AddPage("dialog", center(statusBar, 100, 5), true, true)
+	newpage := tview.NewPages()
+	if _, ok := t.app.tableViews[t.app.currentPage]; ok {
+		newpage.AddPage("status", t.app.currentPrimitive, true, true)
+	}
+	newpage.AddPage("dialog", center(statusBar, 100, 5), true, true)
 	t.app.SwitchPage(t.app.currentPage, newpage)
 
-	if isError {
-		go func() {
-			time.Sleep(time.Second * errorDelayTime)
-			t.SwitchToRootPage()
-		}()
-	}
+	go func() {
+		time.Sleep(time.Second * errorDelayTime)
+		t.SwitchToRootPage()
+	}()
 	return t
 }
 
@@ -247,6 +258,42 @@ func (t *tableView) GetTable() *tview.Table {
 	return t.Table
 }
 
-func (t tableView) BackPage() {
+func (t *tableView) BackPage() {
 	t.app.LastPage()
+}
+
+func (t *tableView) Refresh() {
+	go func() {
+		t.sync <- struct{}{}
+	}()
+}
+
+func (t *tableView) UpdateWithSearch(search string) {
+	t.search = search
+}
+
+func (t *tableView) ShowMenu() {
+	app := t.app
+	if !app.showMenu {
+		newpage := tview.NewPages().AddPage("menu", app.CurrentPage(), true, true).
+			AddPage("menu-decor", center(app.menuView, 60, 15), true, true)
+		app.SwitchPage(app.currentPage, newpage)
+		app.SetFocus(app.menuView)
+		app.showMenu = true
+	}
+}
+
+func (t *tableView) ShowSearch() {
+	t.app.SetFocus(t.app.searchView.InputField)
+}
+
+func (t *tableView) Navigate(r rune) {
+	app := t.app
+	if kind, ok := PageNav[r]; ok {
+		app.footerView.TextView.Highlight(kind).ScrollToHighlight()
+		if _, ok := app.tableViews[kind]; !ok {
+			app.tableViews[kind] = NewTableView(app, kind, tableEventHandler)
+		}
+		app.SwitchPage(kind, app.tableViews[kind])
+	}
 }

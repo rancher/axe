@@ -3,6 +3,7 @@ package axe
 import (
 	"context"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"sync"
 
 	"github.com/gdamore/tcell"
@@ -22,23 +23,24 @@ var logo = `
 type AppView struct {
 	*tview.Flex
 	*tview.Application
-	context     context.Context
-	cancel      context.CancelFunc
-	version     string
-	k8sVersion  string
-	clientset   *kubernetes.Clientset
-	menuView    menuView
-	footerView  footerView
-	statusView  statusView
-	content     contentView
-	drawQueue   *PrimitiveQueue
-	tableViews  map[string]*tableView
-	pageRows    map[string]position
-	showMenu    bool
-	currentPage string
-	switchPage  chan struct{}
-	syncs       map[string]chan struct{}
-	lock        sync.Mutex
+	context          context.Context
+	cancel           context.CancelFunc
+	version          string
+	k8sVersion       string
+	clientset        *kubernetes.Clientset
+	menuView         menuView
+	footerView       footerView
+	searchView       cmdView
+	content          contentView
+	drawQueue        *PrimitiveQueue
+	tableViews       map[string]*tableView
+	pageRows         map[string]position
+	showMenu         bool
+	currentPage      string
+	currentPrimitive *tableView
+	switchPage       chan struct{}
+	syncs            map[string]chan struct{}
+	lock             sync.Mutex
 }
 
 type position struct {
@@ -53,7 +55,7 @@ func NewAppView(clientset *kubernetes.Clientset) *AppView {
 		v.menuView = menuView{AppView: v, Flex: tview.NewFlex()}
 		v.content = contentView{AppView: v, Pages: tview.NewPages()}
 		v.footerView = footerView{AppView: v, TextView: tview.NewTextView()}
-		v.statusView = statusView{AppView: v, TextView: tview.NewTextView()}
+		v.searchView = cmdView{AppView: v, InputField: tview.NewInputField()}
 		v.pageRows = make(map[string]position)
 		v.clientset = clientset
 
@@ -72,20 +74,23 @@ func (app *AppView) Init() error {
 	if err != nil {
 		return err
 	}
+	app.tableViews = map[string]*tableView{
+		RootPage: NewTableView(app, RootPage, tableEventHandler),
+	}
 	app.context, app.cancel = context.WithCancel(context.Background())
 	app.k8sVersion = k8sversion
 	app.menuView.init()
 	app.footerView.init()
-	app.statusView.init()
 	app.content.init()
 	app.switchPage = make(chan struct{}, 1)
-	app.tableViews = map[string]*tableView{
-		RootPage: NewTableView(app, RootPage, tableEventHandler),
-	}
+
 
 	// set default page to root page
 	app.footerView.TextView.Highlight(RootPage).ScrollToHighlight()
-	app.content.SwitchPage(RootPage, app.tableViews[RootPage])
+	app.SwitchPage(RootPage, app.tableViews[RootPage])
+
+	// Initialize after switching page so that it has context of current page to search for
+	app.searchView.init()
 
 	app.setInputHandler()
 
@@ -96,11 +101,11 @@ func (app *AppView) Init() error {
 		main.SetDirection(tview.FlexRow)
 		main.AddItem(app.content, 0, 15, true)
 
-		footer := tview.NewFlex()
+		footer := tview.NewFlex().SetDirection(tview.FlexRow)
+		footer.AddItem(app.searchView.InputField, 0, 1, true)
 		footer.AddItem(app.footerView, 0, 1, false)
-		footer.AddItem(app.statusView, 0, 1, false)
 
-		main.AddItem(footer, 1, 1, false)
+		main.AddItem(footer, 2, 2, false)
 	}
 
 	app.Application.SetRoot(main, true)
@@ -108,11 +113,14 @@ func (app *AppView) Init() error {
 }
 
 func (app *AppView) watch() {
+	go app.currentPrimitive.run(app.context)
 	for {
 		select {
 		case <-app.switchPage:
 			app.cancel()
-			app.tableViews[app.currentPage].run(app.context)
+			// recreate context
+			app.context, app.cancel = context.WithCancel(context.Background())
+			go app.currentPrimitive.run(app.context)
 		}
 	}
 }
@@ -125,7 +133,7 @@ M(Menu): Menu view
 Escape: go back to the previous view
 */
 func (app *AppView) setInputHandler() {
-	app.Application.SetInputCapture(RootEventHandler(app))
+	app.SetInputCapture(EscapeEventHandler(app))
 }
 
 func (app *AppView) menuDecor(page string, p tview.Primitive) {
@@ -143,13 +151,21 @@ func (app *AppView) getK8sVersion() (string, error) {
 }
 
 func (app *AppView) SwitchPage(page string, p tview.Primitive) {
-	app.lock.Lock()
 	if app.currentPage != page {
+		cp := app.currentPage
 		app.currentPage = page
-		app.switchPage <- struct{}{}
+		if _, ok := p.(*tableView); ok {
+			app.currentPrimitive = p.(*tableView)
+		}
+		if cp != "" {
+			go func() {
+				logrus.Info("sending")
+				app.switchPage <- struct{}{}
+			}()
+		}
 	}
-	app.lock.Unlock()
 	app.content.AddAndSwitchToPage(page, p, true)
+
 	app.drawQueue.Enqueue(PageTrack{
 		PageName:  page,
 		Primitive: p,
@@ -157,15 +173,19 @@ func (app *AppView) SwitchPage(page string, p tview.Primitive) {
 	app.SetFocus(p)
 }
 
+func (app *AppView) SwitchToRootPage() {
+	app.showMenu = false
+	app.SwitchPage(app.currentPage, app.tableViews[app.currentPage])
+}
+
 func (app *AppView) CurrentPage() tview.Primitive {
-	return app.tableViews[app.currentPage]
+	return app.currentPrimitive
 }
 
 func (app *AppView) LastPage() {
 	app.drawQueue.Dequeue()
 	page := app.drawQueue.Last()
-	app.content.AddAndSwitchToPage(page.PageName, page.Primitive, true)
-	app.content.SetFocus(page.Primitive)
+	app.SwitchPage(page.PageName, page.Primitive)
 }
 
 type menuView struct {
@@ -180,6 +200,12 @@ func (m *menuView) init() {
 		m.Flex.AddItem(m.logoView(), 6, 1, false)
 		m.Flex.AddItem(m.versionView(), 4, 1, false)
 		m.Flex.AddItem(m.tipsView(), 12, 1, false)
+		m.Flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			if event.Rune() == 'm' {
+				m.AppView.SwitchToRootPage()
+			}
+			return event
+		})
 	}
 }
 
@@ -230,13 +256,15 @@ func newKeyValueCell(key, value string) (*tview.TableCell, *tview.TableCell) {
 	return keycell, valuecell
 }
 
-type statusView struct {
-	*tview.TextView
+type cmdView struct {
+	*tview.InputField
 	*AppView
 }
 
-func (s *statusView) init() {
-	s.TextView.SetBackgroundColor(tcell.ColorGray)
+func (s *cmdView) init() {
+	s.InputField.SetFieldBackgroundColor(tcell.ColorBlack)
+	s.InputField.SetFieldTextColor(tcell.ColorBlue)
+	s.InputField.SetDoneFunc(searchDoneEventHandler(s.AppView, s.currentPrimitive))
 }
 
 type footerView struct {
@@ -259,7 +287,8 @@ type contentView struct {
 	*AppView
 }
 
-func (c *contentView) init() {}
+func (c *contentView) init() {
+}
 
 var center = func(p tview.Primitive, width, height int) tview.Primitive {
 	newflex := tview.NewFlex()

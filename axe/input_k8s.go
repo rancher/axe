@@ -80,7 +80,7 @@ var (
 					if !app.showMenu {
 						newpage := tview.NewPages().AddPage("menu", app.CurrentPage(), true, true).
 							AddPage("menu-decor", center(app.menuView, 60, 15), true, true)
-						app.content.SwitchPage(app.currentPage, newpage)
+						app.SwitchPage(app.currentPage, newpage)
 						app.showMenu = true
 					} else {
 						app.SwitchPage(app.currentPage, app.CurrentPage())

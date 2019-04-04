@@ -31,6 +31,8 @@ func NewDataFeeder(r func(buffer *bytes.Buffer) error) *dataFeeder {
 
 func (c *dataFeeder) Refresh() error {
 	c.buffer.Reset()
+	c.header = nil
+	c.rows = nil
 	return c.refresher(c.buffer)
 }
 

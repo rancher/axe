@@ -55,6 +55,7 @@ var (
 		{"Key x", "Exec"},
 		{"Key n", "Create"},
 		{"Key d", "Delete"},
+		{"Key r", "Refresh"},
 	}
 
 	Footers = []resourceView{
@@ -75,30 +76,11 @@ var (
 		'2': routeKind,
 	}
 
-	// Root page handler to handler page nav and menu view
-	RootEventHandler = func(app *AppView) func(event *tcell.EventKey) *tcell.EventKey {
+	EscapeEventHandler = func(app *AppView) func(event *tcell.EventKey) *tcell.EventKey {
 		return func(event *tcell.EventKey) *tcell.EventKey {
-			switch event.Key() {
-			case tcell.KeyRune:
-				if kind, ok := PageNav[event.Rune()]; ok {
-					app.footerView.TextView.Highlight(kind).ScrollToHighlight()
-					if app.tableViews[kind] == nil {
-						app.tableViews[kind] = NewTableView(app, kind, tableEventHandler)
-					}
-					app.content.SwitchPage(kind, app.tableViews[kind])
-				} else if event.Rune() == 'm' {
-					if !app.showMenu {
-						newpage := tview.NewPages().AddPage("menu", app.CurrentPage(), true, true).
-							AddPage("menu-decor", center(app.menuView, 60, 15), true, true)
-						app.content.SwitchPage(app.currentPage, newpage)
-						app.showMenu = true
-					} else {
-						app.SwitchPage(app.currentPage, app.CurrentPage())
-						app.showMenu = false
-					}
-				}
-			case tcell.KeyEscape:
-				app.LastPage()
+			 if event.Key() == tcell.KeyEscape {
+				app.showMenu = false
+				app.SwitchPage(app.currentPage, app.CurrentPage())
 			}
 			return event
 		}
@@ -119,11 +101,34 @@ var (
 					Exec("", h)
 				case 'd':
 					Rm(h)
+				case 'r':
+					h.Refresh()
+				case '/':
+					h.ShowSearch()
+				case 'm':
+					h.ShowMenu()
+				default:
+					h.Navigate(event.Rune())
 				}
 			}
 			return event
 		}
 	}
+
+	searchDoneEventHandler = func(app *AppView, h status.GenericDrawer) func(key tcell.Key) {
+		return func(key tcell.Key) {
+			switch key {
+			case tcell.KeyEscape:
+				app.SetFocus(app.content)
+				app.searchView.InputField.SetText("")
+			case tcell.KeyEnter:
+				h.UpdateWithSearch(app.searchView.InputField.GetText())
+				app.searchView.InputField.SetText("")
+				h.Refresh()
+			}
+		}
+	}
+
 
 	Route = ResourceKind{
 		Title: "Routes",

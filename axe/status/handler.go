@@ -20,4 +20,9 @@ type GenericDrawer interface {
 	SwitchPage(page string, draw tview.Primitive)
 	BackPage()
 	SwitchToRootPage()
+	Refresh()
+	UpdateWithSearch(search string)
+	ShowMenu()
+	ShowSearch()
+	Navigate(r rune)
 }
