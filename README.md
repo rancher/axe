@@ -3,10 +3,11 @@ axe
 
 ## ***Throwing some axes for fun***
 
+![axe](https://media.giphy.com/media/l17uofKSRXJGIsnYNB/giphy.gif)
+
 ## Building
 
 `make`
-
 
 ## Running
 
