@@ -2,6 +2,7 @@ package throwing
 
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
 	"time"
@@ -42,14 +43,26 @@ func NewTableView(app *AppView, kind string, drawer types.Drawer) *TableView {
 		Table:  tview.NewTable(),
 		drawer: drawer,
 	}
-	t.init(app, view.Kind, view.Feeder, view.Actions, drawer.PageNav)
+	t.init(app, view.Kind, view.Feeder, view.Actions, drawer.PageNav, nil)
 	if err := t.refresh(); err != nil {
 		return t.UpdateStatus(err.Error(), true).(*TableView)
 	}
 	return t
 }
 
-func (t *TableView) init(app *AppView, resource types.ResourceKind, dataFeeder datafeeder.DataSource, actions []types.Action, pageNav map[rune]string) {
+func (t *TableView) NewNestTableView(kind types.ResourceKind, feeder datafeeder.DataSource, actions []types.Action, pageNav map[rune]string, embeddedHandler EventHandler) *TableView {
+	nt := &TableView{
+		Table: tview.NewTable(),
+		drawer: t.drawer,
+	}
+	nt.init(t.app, kind, feeder, actions, pageNav, embeddedHandler)
+	if err := nt.refresh(); err != nil {
+		return t.UpdateStatus(err.Error(), true).(*TableView)
+	}
+	return nt
+}
+
+func (t *TableView) init(app *AppView, resource types.ResourceKind, dataFeeder datafeeder.DataSource, actions []types.Action, pageNav map[rune]string, embeddedHandler EventHandler) {
 	{
 		t.app = app
 		t.resourceKind = resource
@@ -66,7 +79,6 @@ func (t *TableView) init(app *AppView, resource types.ResourceKind, dataFeeder d
 		t.Table.SetSelectable(true, false)
 		t.Table.SetTitle(t.resourceKind.Title)
 	}
-	//
 	if t.sync == nil {
 		t.sync = make(chan struct{}, 0)
 	}
@@ -87,6 +99,11 @@ func (t *TableView) init(app *AppView, resource types.ResourceKind, dataFeeder d
 			column: column,
 		}
 	})
+
+	if embeddedHandler != nil {
+		t.SetInputCapture(embeddedHandler(t))
+		return
+	}
 
 	if app.handler != nil {
 		t.SetInputCapture(app.handler(t))
@@ -213,6 +230,7 @@ func (t *TableView) UpdateStatus(status string, isError bool) tview.Primitive {
 	go func() {
 		time.Sleep(time.Second * errorDelayTime)
 		t.SwitchToRootPage()
+		t.GetApplication().Draw()
 	}()
 	return t
 }
@@ -292,17 +310,19 @@ func (t *TableView) Navigate(r rune) {
 	}
 }
 
-func (t *TableView) RootPage() tview.Primitive {
-	return t.app.tableViews[t.app.currentPage]
+func (t *TableView) RootPage() {
+	logrus.Info(t.drawer.RootPage)
+	t.SwitchPage(t.drawer.RootPage, t.app.tableViews[t.drawer.RootPage])
 }
 
-func (t *TableView) NewNestTableView(kind types.ResourceKind, feeder datafeeder.DataSource, actions []types.Action, pageNav map[rune]string, handler EventHandler) tview.Primitive {
-	nt := &TableView{
-		Table: tview.NewTable(),
-	}
-	nt.init(t.app, kind, feeder, actions, pageNav)
-	if err := nt.refresh(); err != nil {
-		return t.UpdateStatus(err.Error(), true).(*TableView)
-	}
-	return nt
+func (t *TableView) LastPage() {
+	t.app.LastPage()
+}
+
+func (t *TableView) GetNestedTable(kind string) *TableView {
+	return t.app.tableViews[kind]
+}
+
+func (t *TableView) SetTableView(kind string, nt *TableView) {
+	t.app.tableViews[kind] = nt
 }

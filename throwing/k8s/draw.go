@@ -38,6 +38,7 @@ var (
 		{"Key g", "get"},
 		{"Key e", "edit"},
 		{"Key d", "delete"},
+		{"Key /", "search"},
 	}
 
 	ViewMap = map[string]types.View{
@@ -72,8 +73,13 @@ var (
 					t.UpdateStatus(err.Error(), true)
 				}
 			case tcell.KeyRune:
-				if event.Rune() == 'm' {
+				switch event.Rune() {
+				case 'm':
 					t.ShowMenu()
+				case '/':
+					t.ShowSearch()
+				case 'r':
+					t.Refresh()
 				}
 			}
 			return event
@@ -82,15 +88,23 @@ var (
 
 	itemEventHandler = func(t *throwing.TableView) func(event *tcell.EventKey) *tcell.EventKey {
 		return func(event *tcell.EventKey) *tcell.EventKey {
-			switch event.Rune() {
-			case 'g':
-				get(t)
-			case 'e':
-				edit(t)
-			case 'd':
-				delete(t)
-			case 'm':
-				t.ShowMenu()
+			if event.Key() == tcell.KeyCtrlQ {
+				t.RootPage()
+			} else {
+				switch event.Rune() {
+				case 'g':
+					get(t)
+				case 'e':
+					edit(t)
+				case 'd':
+					delete(t)
+				case 'x':
+					execute(t)
+				case 'l':
+					logs(t)
+				case 'm':
+					t.ShowMenu()
+				}
 			}
 			return event
 		}
@@ -115,7 +129,10 @@ func Start(c *cli.Context) error {
 	}
 	clientset := kubernetes.NewForConfigOrDie(restConfig)
 
-	app := throwing.NewAppView(clientset, drawer, tableEventHandler)
+	signals := map[string]chan struct{}{
+		k8sKind: make(chan struct{}, 0),
+	}
+	app := throwing.NewAppView(clientset, drawer, tableEventHandler, signals)
 	if err := app.Init(); err != nil {
 		return err
 	}

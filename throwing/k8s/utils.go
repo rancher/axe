@@ -33,10 +33,11 @@ func getNamespaceAndName(t *throwing.TableView) (string, string) {
 }
 
 func get(t *throwing.TableView) {
-	namespace, name := getNamespaceAndName(t)
 	out := &strings.Builder{}
 	errB := &strings.Builder{}
+
 	var args []string
+	namespace, name := getNamespaceAndName(t)
 	if namespace != "" {
 		args = []string{"get", t.GetResourceKind(), "-n", namespace, name, "-o", "yaml"}
 	} else {
@@ -48,9 +49,16 @@ func get(t *throwing.TableView) {
 		t.UpdateStatus(errB.String(), true)
 		return
 	}
+
 	box := tview.NewTextView()
 	box.SetDynamicColors(true).SetBackgroundColor(tcell.ColorBlack)
 	box.SetText(out.String())
+	box.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEscape {
+			t.SwitchToRootPage()
+		}
+	})
+
 	newpage := tview.NewPages().AddPage("get", box, true, true)
 	t.SwitchPage(t.GetCurrentPage(), newpage)
 }
@@ -74,6 +82,68 @@ func edit(t *throwing.TableView) {
 		}
 		return
 	})
+}
+
+func execute(t *throwing.TableView) {
+	if t.GetResourceKind() != "pods" {
+		return
+	}
+
+	namespace, name := getNamespaceAndName(t)
+	errb := &strings.Builder{}
+	shellArgs := []string{"/bin/sh", "-c", "TERM=xterm-256color; export TERM; [ -x /bin/bash ] && ([ -x /usr/bin/script ] && /usr/bin/script -q -c /bin/bash /dev/null || exec /bin/bash) || exec /bin/sh"}
+	args := append([]string{"exec", "-it", "-n", namespace, name, "--"}, shellArgs...)
+	cmd := exec.Command("kubectl", args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, errb
+
+	t.GetApplication().Suspend(func() {
+		clearScreen()
+		if err := cmd.Run(); err != nil {
+			t.UpdateStatus(errb.String(), true)
+		}
+		return
+	})
+}
+
+func logs(t *throwing.TableView) {
+	if t.GetResourceKind() != "pods" {
+		return
+	}
+
+	errB := &strings.Builder{}
+	var args []string
+	namespace, name := getNamespaceAndName(t)
+	args = []string{"logs", "-f", "-n", namespace, name, "--all-containers"}
+	cmd := exec.Command("kubectl", args...)
+	cmd.Stderr = errB
+
+	logbox := tview.NewTextView()
+	{
+		logbox.SetTitle(fmt.Sprintf("logs - (%s)", name))
+		logbox.SetBorder(true)
+		logbox.SetTitleColor(tcell.ColorPurple)
+		logbox.SetDynamicColors(true)
+		logbox.SetBackgroundColor(tcell.ColorBlack)
+		logbox.SetChangedFunc(func() {
+			logbox.ScrollToEnd()
+			t.GetApplication().Draw()
+		})
+		logbox.SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEscape {
+				cmd.Process.Kill()
+			}
+		})
+	}
+
+	cmd.Stdout = tview.ANSIWriter(logbox)
+	go func() {
+		if err := cmd.Run(); err != nil {
+			return
+		}
+	}()
+
+	newpage := tview.NewPages().AddPage("logs", logbox, true, true)
+	t.SwitchPage(t.GetCurrentPage(), newpage)
 }
 
 func clearScreen() {
@@ -141,6 +211,12 @@ func viewResource(t *throwing.TableView) {
 	}
 
 	feeder := datafeeder.NewDataFeeder(w.refreshResource)
-	newTable := t.NewNestTableView(rkind, feeder, nil, nil, itemEventHandler)
-	t.SwitchPage(t.GetCurrentPage(), newTable)
+
+	newtable := t.GetNestedTable(rkind.Kind)
+	if newtable == nil {
+		newtable = t.NewNestTableView(rkind, feeder, nil, nil, itemEventHandler)
+	}
+	t.SetTableView(rkind.Kind, newtable)
+
+	t.SwitchPage(apiResource.Name, newtable)
 }

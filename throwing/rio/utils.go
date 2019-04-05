@@ -4,12 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"sort"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/quick"
-	"github.com/alecthomas/chroma/styles"
 	"github.com/gdamore/tcell"
 	"github.com/rancher/axe/throwing"
 	"github.com/rancher/axe/throwing/datafeeder"
@@ -20,15 +16,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-
-
-func init() {
-	for style := range styles.Registry {
-		colorStyles = append(colorStyles, style)
-	}
-	sort.Strings(colorStyles)
-}
-
 func actionView(t *throwing.TableView) {
 	list := newSelectionList()
 	list.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
@@ -36,24 +23,10 @@ func actionView(t *throwing.TableView) {
 		case "inspect":
 			formatList := newSelectionList()
 			formatList.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
-				if s2 == "json format" || s2 == "yaml format" {
-					inspect(s, defaultStyle, false, t)
-				} else {
-					colorList := newSelectionList()
-					for _, s := range colorStyles {
-						colorList.AddItem(s, "", ' ', nil)
-					}
-					colorList.SetSelectedFunc(func(i int, style string, s2 string, r rune) {
-						inspect(s, style, true, t)
-					})
-
-					t.InsertDialog("inspect-color", t.GetCurrentPrimitive(), colorList)
-				}
+				inspect(s, t)
 			})
 			formatList.AddItem("yaml", "yaml format", 'y', nil)
-			formatList.AddItem("yaml", "yaml with different color styles", 'u', nil)
 			formatList.AddItem("json", "json format", 'j', nil)
-			formatList.AddItem("json", "json with different color styles", 'k', nil)
 			t.InsertDialog("inspect-format", t.GetCurrentPrimitive(), formatList)
 		case "log":
 			list := newContainerSelectionList(t)
@@ -132,11 +105,11 @@ func listRioContainer(name string, clientset *kubernetes.Clientset) ([]string, e
 /*
 	general rio operation(inspect, edit, exec, logs, create)
 */
-func inspect(format, style string, colorful bool, t *throwing.TableView) {
+func inspect(format string, t *throwing.TableView) {
 	name := t.GetSelectionName()
 	outBuffer := &strings.Builder{}
 	errBuffer := &strings.Builder{}
-	args := []string{"inspect", "-t", t.GetResourceKind(), name}
+	args := []string{"inspect", "--format", format, "-t", t.GetResourceKind(), name}
 	cmd := exec.Command("rio", args...)
 	cmd.Stdout = outBuffer
 	cmd.Stderr = errBuffer
@@ -146,17 +119,8 @@ func inspect(format, style string, colorful bool, t *throwing.TableView) {
 	}
 
 	inspectBox := tview.NewTextView()
-	if colorful {
-		inspectBox.SetDynamicColors(true).SetBackgroundColor(tcell.Color(styles.Registry[style].Get(chroma.Background).Background))
-		writer := tview.ANSIWriter(inspectBox)
-		if err := quick.Highlight(writer, outBuffer.String(), format, "terminal256", style); err != nil {
-			t.UpdateStatus(err.Error(), true)
-			return
-		}
-	} else {
-		inspectBox.SetDynamicColors(true).SetBackgroundColor(defaultBackGroundColor)
-		inspectBox.SetText(outBuffer.String())
-	}
+	inspectBox.SetDynamicColors(true).SetBackgroundColor(defaultBackGroundColor)
+	inspectBox.SetText(outBuffer.String())
 
 	newpage := tview.NewPages().AddPage("inspect", inspectBox, true, true)
 	t.SwitchPage(t.GetCurrentPage(), newpage)
@@ -257,7 +221,7 @@ func viewPods(t *throwing.TableView) {
 			case tcell.KeyRune:
 				switch event.Rune() {
 				case 'i':
-					inspect("yaml", defaultStyle, false, t)
+					inspect("yaml", t)
 				case 'l':
 					logs("", t)
 				case 'x':

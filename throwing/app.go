@@ -50,7 +50,14 @@ type position struct {
 	row, column int
 }
 
-func NewAppView(clientset *kubernetes.Clientset, dr types.Drawer, handler EventHandler) *AppView {
+/*
+NewAppView takes 4 parameters:
+	Clientset: Kubernetes client
+	Drawer: Generic drawer to define how the table view looks like
+	Handler: Event handler
+	RefresherSignals: External Signal to trigger table refresh, mapped by resource kind
+ */
+func NewAppView(clientset *kubernetes.Clientset, dr types.Drawer, handler EventHandler, refreshSignals map[string]chan struct{}) *AppView {
 	v := &AppView{Application: tview.NewApplication()}
 	{
 		v.Flex = tview.NewFlex()
@@ -63,6 +70,7 @@ func NewAppView(clientset *kubernetes.Clientset, dr types.Drawer, handler EventH
 		v.clientset = clientset
 		v.Drawer = dr
 		v.handler = handler
+		v.syncs = refreshSignals
 
 		{
 			v.menuView.SetBackgroundColor(tcell.ColorBlack)

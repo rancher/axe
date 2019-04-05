@@ -66,7 +66,7 @@ var (
 			case tcell.KeyRune:
 				switch event.Rune() {
 				case 'i':
-					inspect("yaml", defaultStyle, false, t)
+					inspect("yaml", t)
 				case 'l':
 					logs("", t)
 				case 'x':
@@ -185,7 +185,12 @@ func Start(c *cli.Context) error {
 	}
 	clientset := kubernetes.NewForConfigOrDie(restConfig)
 
-	app := throwing.NewAppView(clientset, drawer, tableEventHandler)
+	signals := map[string]chan struct{}{
+		serviceKind: make(chan struct{}, 0),
+		routeKind: make(chan struct{}, 0),
+	}
+
+	app := throwing.NewAppView(clientset, drawer, tableEventHandler, signals)
 	if err := app.Init(); err != nil {
 		return err
 	}
