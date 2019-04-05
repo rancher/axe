@@ -1,4 +1,4 @@
-package axe
+package throwing
 
 import (
 	"github.com/rivo/tview"
@@ -29,8 +29,8 @@ func (p *PrimitiveQueue) Empty() bool {
 func (p *PrimitiveQueue) last(dequeue bool) PageTrack {
 	if p.Empty() {
 		return PageTrack{
-			Primitive: p.AppView.tableViews[RootPage],
-			PageName:  RootPage,
+			Primitive: p.AppView.tableViews[p.RootPage],
+			PageName:  p.RootPage,
 		}
 	}
 	item := p.items[len(p.items)-1]

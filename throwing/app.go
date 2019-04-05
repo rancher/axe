@@ -1,11 +1,12 @@
-package axe
+package throwing
 
 import (
 	"context"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"sync"
 
+	"github.com/rancher/axe/throwing/types"
+	"github.com/sirupsen/logrus"
 	"github.com/gdamore/tcell"
 	"github.com/rancher/axe/version"
 	"github.com/rivo/tview"
@@ -23,6 +24,8 @@ var logo = `
 type AppView struct {
 	*tview.Flex
 	*tview.Application
+	types.Drawer
+	handler          EventHandler
 	context          context.Context
 	cancel           context.CancelFunc
 	version          string
@@ -33,11 +36,11 @@ type AppView struct {
 	searchView       cmdView
 	content          contentView
 	drawQueue        *PrimitiveQueue
-	tableViews       map[string]*tableView
+	tableViews       map[string]*TableView
 	pageRows         map[string]position
 	showMenu         bool
 	currentPage      string
-	currentPrimitive *tableView
+	currentPrimitive *TableView
 	switchPage       chan struct{}
 	syncs            map[string]chan struct{}
 	lock             sync.Mutex
@@ -47,7 +50,7 @@ type position struct {
 	row, column int
 }
 
-func NewAppView(clientset *kubernetes.Clientset) *AppView {
+func NewAppView(clientset *kubernetes.Clientset, dr types.Drawer, handler EventHandler) *AppView {
 	v := &AppView{Application: tview.NewApplication()}
 	{
 		v.Flex = tview.NewFlex()
@@ -58,6 +61,8 @@ func NewAppView(clientset *kubernetes.Clientset) *AppView {
 		v.searchView = cmdView{AppView: v, InputField: tview.NewInputField()}
 		v.pageRows = make(map[string]position)
 		v.clientset = clientset
+		v.Drawer = dr
+		v.handler = handler
 
 		{
 			v.menuView.SetBackgroundColor(tcell.ColorBlack)
@@ -74,8 +79,8 @@ func (app *AppView) Init() error {
 	if err != nil {
 		return err
 	}
-	app.tableViews = map[string]*tableView{
-		RootPage: NewTableView(app, RootPage, tableEventHandler),
+	app.tableViews = map[string]*TableView{
+		app.RootPage: NewTableView(app, app.RootPage, app.Drawer),
 	}
 	app.context, app.cancel = context.WithCancel(context.Background())
 	app.k8sVersion = k8sversion
@@ -84,10 +89,9 @@ func (app *AppView) Init() error {
 	app.content.init()
 	app.switchPage = make(chan struct{}, 1)
 
-
 	// set default page to root page
-	app.footerView.TextView.Highlight(RootPage).ScrollToHighlight()
-	app.SwitchPage(RootPage, app.tableViews[RootPage])
+	app.footerView.TextView.Highlight(app.RootPage).ScrollToHighlight()
+	app.SwitchPage(app.RootPage, app.tableViews[app.RootPage])
 
 	// Initialize after switching page so that it has context of current page to search for
 	app.searchView.init()
@@ -154,8 +158,8 @@ func (app *AppView) SwitchPage(page string, p tview.Primitive) {
 	if app.currentPage != page {
 		cp := app.currentPage
 		app.currentPage = page
-		if _, ok := p.(*tableView); ok {
-			app.currentPrimitive = p.(*tableView)
+		if _, ok := p.(*TableView); ok {
+			app.currentPrimitive = p.(*TableView)
 		}
 		if cp != "" {
 			go func() {
@@ -241,7 +245,7 @@ func (m *menuView) tipsView() *tview.Table {
 	t.SetBorder(true)
 	t.SetTitle("Shortcuts")
 	var row int
-	for _, values := range Shortcuts {
+	for _, values := range m.Shortcuts {
 		kc, vc := newKeyValueCell(values[0], values[1])
 		t.SetCell(row, 0, kc)
 		t.SetCell(row, 1, vc)
@@ -277,7 +281,7 @@ func (f *footerView) init() {
 		SetDynamicColors(true).
 		SetRegions(true).
 		SetWrap(false).SetBackgroundColor(tcell.ColorGray)
-	for index, t := range Footers {
+	for index, t := range f.Footers {
 		fmt.Fprintf(f.TextView, `%d ["%s"][black]%s[white][""] `, index+1, t.Kind, t.Title)
 	}
 }

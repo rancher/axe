@@ -1,7 +1,7 @@
 axe
 ========
 
-## ***FILL THIS OUT WITH A USEFUL DESCRIPTION OF THIS REPO***
+## ***Throwing some axes for fun***
 
 ## Building
 
@@ -10,7 +10,31 @@ axe
 
 ## Running
 
-`./bin/axe`
+`./bin/axe --kubeconfig $KUBECONFIG`
+
+## Example
+
+1. Define your root page, shortcuts, viewmap, pageNav, footers, tableEventHandler
+2. Run!
+
+```$xslt
+
+drawer = types.Drawer{
+	RootPage:  RootPage,
+	Shortcuts: Shortcuts,
+	ViewMap:   ViewMap,
+	PageNav:   PageNav,
+	Footers:   Footers,
+}
+	
+app := throwing.NewAppView(clientset, drawer, tableEventHandler)
+if err := app.Init(); err != nil {
+	return err
+}
+
+return app.Run()
+
+```
 
 ## License
 Copyright (c) 2018 [Rancher Labs, Inc.](http://rancher.com)

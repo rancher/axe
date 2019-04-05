@@ -1,5 +1,3 @@
-// +build k8s
-
 package k8s
 
 import (
@@ -17,11 +15,11 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type Wrapper struct {
-	Group, Version, Name string
+type wrapper struct {
+	group, version, name string
 }
 
-func (w Wrapper) RefreshResource(b *bytes.Buffer) error {
+func (w wrapper) refreshResource(b *bytes.Buffer) error {
 	restConfig, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
 	if err != nil {
 		return err
@@ -33,13 +31,13 @@ func (w Wrapper) RefreshResource(b *bytes.Buffer) error {
 
 	restClient := clientset.RESTClient()
 	apiPrefix := "apis"
-	if w.Group == "" {
+	if w.group == "" {
 		apiPrefix = "api"
 	}
-	if w.Version == "" {
-		w.Version = "v1"
+	if w.version == "" {
+		w.version = "v1"
 	}
-	req := restClient.Get().Prefix(apiPrefix, w.Group, w.Version).Resource(w.Name).Param("includeObject", "Object")
+	req := restClient.Get().Prefix(apiPrefix, w.group, w.version).Resource(w.name).Param("includeObject", "Object")
 	header := "application/json;as=Table;g=meta.k8s.io;v=v1beta1, application/json"
 	req.SetHeader("Accept", header)
 	table := &v1beta1.Table{}

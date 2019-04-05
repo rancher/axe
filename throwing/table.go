@@ -1,4 +1,4 @@
-package axe
+package throwing
 
 import (
 	"fmt"
@@ -6,11 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rancher/axe/axe/status"
-
 	"github.com/gdamore/tcell"
-	"github.com/rancher/axe/axe/action"
-	"github.com/rancher/axe/axe/datafeeder"
+	"github.com/rancher/axe/throwing/datafeeder"
+	"github.com/rancher/axe/throwing/types"
 	"github.com/rivo/tview"
 	"golang.org/x/net/context"
 	"k8s.io/client-go/kubernetes"
@@ -20,46 +18,38 @@ const (
 	errorDelayTime = 1
 )
 
-type tableView struct {
+type TableView struct {
 	*tview.Table
 
+	drawer       types.Drawer
+	navigateMap  map[rune]string
 	client       *kubernetes.Clientset
 	app          *AppView
 	data         []interface{}
 	dataSource   datafeeder.DataSource
 	lock         sync.Mutex
 	sync         chan struct{}
-	actions      []action.Action
-	resourceKind ResourceKind
+	actions      []types.Action
+	resourceKind types.ResourceKind
 	search       string
 }
 
-type EventHandler func(h status.GenericDrawer) func(event *tcell.EventKey) *tcell.EventKey
+type EventHandler func(t *TableView) func(event *tcell.EventKey) *tcell.EventKey
 
-func NewTableView(app *AppView, kind string, h EventHandler) *tableView {
-	v := ViewMap[kind]
-	t := &tableView{
-		Table: tview.NewTable(),
+func NewTableView(app *AppView, kind string, drawer types.Drawer) *TableView {
+	view := drawer.ViewMap[kind]
+	t := &TableView{
+		Table:  tview.NewTable(),
+		drawer: drawer,
 	}
-	t.init(app, v.Kind, v.Feeder, v.Actions, h)
+	t.init(app, view.Kind, view.Feeder, view.Actions, drawer.PageNav)
 	if err := t.refresh(); err != nil {
-		return t.UpdateStatus(err.Error(), true).(*tableView)
+		return t.UpdateStatus(err.Error(), true).(*TableView)
 	}
 	return t
 }
 
-func NewTableViewWithArgs(app *AppView, kind ResourceKind, feeder datafeeder.DataSource, actions []action.Action, h EventHandler) *tableView {
-	t := &tableView{
-		Table: tview.NewTable(),
-	}
-	t.init(app, kind, feeder, actions, h)
-	if err := t.refresh(); err != nil {
-		return t.UpdateStatus(err.Error(), true).(*tableView)
-	}
-	return t
-}
-
-func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafeeder.DataSource, actions []action.Action, h EventHandler) {
+func (t *TableView) init(app *AppView, resource types.ResourceKind, dataFeeder datafeeder.DataSource, actions []types.Action, pageNav map[rune]string) {
 	{
 		t.app = app
 		t.resourceKind = resource
@@ -67,6 +57,7 @@ func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafee
 		t.sync = app.syncs[resource.Kind]
 		t.actions = actions
 		t.client = app.clientset
+		t.navigateMap = pageNav
 	}
 	{
 		t.Table.SetBorder(true)
@@ -84,7 +75,7 @@ func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafee
 		t.Table.Select(p.row, p.column)
 	}
 
-	actionMap := map[rune]action.Action{}
+	actionMap := map[rune]types.Action{}
 	for _, a := range t.actions {
 		actionMap[a.Shortcut] = a
 	}
@@ -97,12 +88,12 @@ func (t *tableView) init(app *AppView, resource ResourceKind, dataFeeder datafee
 		}
 	})
 
-	if h != nil {
-		t.SetInputCapture(h(t))
+	if app.handler != nil {
+		t.SetInputCapture(app.handler(t))
 	}
 }
 
-func (t *tableView) run(ctx context.Context) {
+func (t *TableView) run(ctx context.Context) {
 	for {
 		select {
 		case <-t.sync:
@@ -116,18 +107,18 @@ func (t *tableView) run(ctx context.Context) {
 	}
 }
 
-func (t *tableView) GetSelectionName() string {
+func (t *TableView) GetSelectionName() string {
 	row, _ := t.Table.GetSelection()
 	cell := t.Table.GetCell(row, 0)
 
 	return strings.SplitN(cell.Text, " ", 2)[0]
 }
 
-func (t *tableView) SwitchToRootPage() {
+func (t *TableView) SwitchToRootPage() {
 	t.app.SwitchToRootPage()
 }
 
-func (t *tableView) refresh() error {
+func (t *TableView) refresh() error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -138,7 +129,7 @@ func (t *tableView) refresh() error {
 	return nil
 }
 
-func (t *tableView) draw() {
+func (t *TableView) draw() {
 	t.Clear()
 
 	header := t.dataSource.Header()
@@ -167,7 +158,7 @@ func (t *tableView) draw() {
 	t.GetApplication().Draw()
 }
 
-func (t *tableView) addHeaderCell(col int, name string) {
+func (t *TableView) addHeaderCell(col int, name string) {
 	c := tview.NewTableCell(fmt.Sprintf("[white]%s", name)).SetSelectable(false)
 	{
 		c.SetExpansion(1)
@@ -177,7 +168,7 @@ func (t *tableView) addHeaderCell(col int, name string) {
 	t.Table.SetCell(0, col, c)
 }
 
-func (t *tableView) addBodyCell(row, col int, value string) {
+func (t *TableView) addBodyCell(row, col int, value string) {
 	c := tview.NewTableCell(fmt.Sprintf("%s", value))
 	{
 		c.SetExpansion(1)
@@ -186,7 +177,7 @@ func (t *tableView) addBodyCell(row, col int, value string) {
 	t.Table.SetCell(row+1, col, c)
 }
 
-func (t *tableView) InsertDialog(name string, page tview.Primitive, dialog tview.Primitive) {
+func (t *TableView) InsertDialog(name string, page tview.Primitive, dialog tview.Primitive) {
 	newpage := tview.NewPages()
 	newpage.AddPage(name, page, true, true).
 		AddPage("dialog", center(dialog, 40, 15), true, true)
@@ -194,7 +185,7 @@ func (t *tableView) InsertDialog(name string, page tview.Primitive, dialog tview
 	t.app.Application.SetFocus(dialog)
 }
 
-func (t *tableView) UpdateStatus(status string, isError bool) tview.Primitive {
+func (t *TableView) UpdateStatus(status string, isError bool) tview.Primitive {
 	statusBar := tview.NewTextView()
 	statusBar.SetBorder(true)
 	statusBar.SetBorderAttributes(tcell.AttrBold)
@@ -214,7 +205,7 @@ func (t *tableView) UpdateStatus(status string, isError bool) tview.Primitive {
 	statusBar.SetTextAlign(tview.AlignCenter)
 	newpage := tview.NewPages()
 	if _, ok := t.app.tableViews[t.app.currentPage]; ok {
-		newpage.AddPage("status", t.app.currentPrimitive, true, true)
+		newpage.AddPage("handler", t.app.currentPrimitive, true, true)
 	}
 	newpage.AddPage("dialog", center(statusBar, 100, 5), true, true)
 	t.app.SwitchPage(t.app.currentPage, newpage)
@@ -226,56 +217,56 @@ func (t *tableView) UpdateStatus(status string, isError bool) tview.Primitive {
 	return t
 }
 
-func (t *tableView) GetClientSet() *kubernetes.Clientset {
+func (t *TableView) GetClientSet() *kubernetes.Clientset {
 	return t.client
 }
 
-func (t *tableView) GetResourceKind() string {
+func (t *TableView) GetResourceKind() string {
 	return t.resourceKind.Kind
 }
 
-func (t *tableView) GetCurrentPage() string {
+func (t *TableView) GetCurrentPage() string {
 	return t.app.currentPage
 }
 
-func (t *tableView) GetAction() []action.Action {
+func (t *TableView) GetAction() []types.Action {
 	return t.actions
 }
 
-func (t *tableView) GetApplication() *tview.Application {
+func (t *TableView) GetApplication() *tview.Application {
 	return t.app.Application
 }
 
-func (t *tableView) GetCurrentPrimitive() tview.Primitive {
+func (t *TableView) GetCurrentPrimitive() tview.Primitive {
 	if t.app.drawQueue.Empty() {
-		return t.app.tableViews[RootPage]
+		return t.app.tableViews[t.drawer.RootPage]
 	}
 	return t.app.drawQueue.Last()
 }
 
-func (t *tableView) SwitchPage(page string, draw tview.Primitive) {
+func (t *TableView) SwitchPage(page string, draw tview.Primitive) {
 	t.app.SwitchPage(page, draw)
 }
 
-func (t *tableView) GetTable() *tview.Table {
+func (t *TableView) GetTable() *tview.Table {
 	return t.Table
 }
 
-func (t *tableView) BackPage() {
+func (t *TableView) BackPage() {
 	t.app.LastPage()
 }
 
-func (t *tableView) Refresh() {
+func (t *TableView) Refresh() {
 	go func() {
 		t.sync <- struct{}{}
 	}()
 }
 
-func (t *tableView) UpdateWithSearch(search string) {
+func (t *TableView) UpdateWithSearch(search string) {
 	t.search = search
 }
 
-func (t *tableView) ShowMenu() {
+func (t *TableView) ShowMenu() {
 	app := t.app
 	if !app.showMenu {
 		newpage := tview.NewPages().AddPage("menu", app.CurrentPage(), true, true).
@@ -286,21 +277,32 @@ func (t *tableView) ShowMenu() {
 	}
 }
 
-func (t *tableView) ShowSearch() {
+func (t *TableView) ShowSearch() {
 	t.app.SetFocus(t.app.searchView.InputField)
 }
 
-func (t *tableView) Navigate(r rune) {
+func (t *TableView) Navigate(r rune) {
 	app := t.app
-	if kind, ok := PageNav[r]; ok {
+	if kind, ok := t.navigateMap[r]; ok {
 		app.footerView.TextView.Highlight(kind).ScrollToHighlight()
 		if _, ok := app.tableViews[kind]; !ok {
-			app.tableViews[kind] = NewTableView(app, kind, tableEventHandler)
+			app.tableViews[kind] = NewTableView(app, kind, t.drawer)
 		}
 		app.SwitchPage(kind, app.tableViews[kind])
 	}
 }
 
-func (t *tableView) RootPage() tview.Primitive {
+func (t *TableView) RootPage() tview.Primitive {
 	return t.app.tableViews[t.app.currentPage]
+}
+
+func (t *TableView) NewNestTableView(kind types.ResourceKind, feeder datafeeder.DataSource, actions []types.Action, pageNav map[rune]string, handler EventHandler) tview.Primitive {
+	nt := &TableView{
+		Table: tview.NewTable(),
+	}
+	nt.init(t.app, kind, feeder, actions, pageNav)
+	if err := nt.refresh(); err != nil {
+		return t.UpdateStatus(err.Error(), true).(*TableView)
+	}
+	return nt
 }

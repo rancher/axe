@@ -1,8 +1,7 @@
-package axe
+package throwing
 
 import (
 	"github.com/gdamore/tcell"
-	"github.com/rancher/axe/axe/status"
 )
 
 var (
@@ -16,16 +15,16 @@ var (
 		}
 	}
 
-	searchDoneEventHandler = func(app *AppView, h status.GenericDrawer) func(key tcell.Key) {
+	searchDoneEventHandler = func(app *AppView, t *TableView) func(key tcell.Key) {
 		return func(key tcell.Key) {
 			switch key {
 			case tcell.KeyEscape:
 				app.SetFocus(app.content)
 				app.searchView.InputField.SetText("")
 			case tcell.KeyEnter:
-				h.UpdateWithSearch(app.searchView.InputField.GetText())
+				t.UpdateWithSearch(app.searchView.InputField.GetText())
 				app.searchView.InputField.SetText("")
-				h.Refresh()
+				t.Refresh()
 			}
 		}
 	}

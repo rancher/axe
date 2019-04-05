@@ -11,7 +11,7 @@ import (
 
 func Config() *norman.Config {
 	return &norman.Config{
-		Name: "axe",
+		Name: "throwing",
 		Schemas: []*types.Schemas{
 			v1.Schemas,
 		},

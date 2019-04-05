@@ -1,5 +1,3 @@
-// +build rio
-
 package rio
 
 import (

@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	if err := generator.DefaultGenerate(v1.Schemas, "github.com/rancher/axe/types", false, nil); err != nil {
+	if err := generator.DefaultGenerate(v1.Schemas, "github.com/rancher/throwing/types", false, nil); err != nil {
 		logrus.Fatal(err)
 	}
 }
