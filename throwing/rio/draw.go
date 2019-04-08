@@ -18,7 +18,6 @@ const (
 
 	stackLabel   = "rio.cattle.io/stack"
 	serviceLabel = "rio.cattle.io/service"
-	defaultStyle = "native"
 )
 
 var (
@@ -29,10 +28,10 @@ var (
 	RootPage = serviceKind
 
 	Shortcuts = [][]string{
-		{"Key i", "inspect"},
+		{"Key i", "Inspect"},
 		{"Key e", "Edit"},
-		{"Key l", "logs"},
-		{"Key x", "execute"},
+		{"Key l", "Logs"},
+		{"Key x", "Exec"},
 		{"Key n", "Create"},
 		{"Key d", "Delete"},
 		{"Key r", "Refresh"},

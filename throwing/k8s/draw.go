@@ -35,10 +35,12 @@ var (
 	}
 
 	Shortcuts = [][]string{
-		{"Key g", "get"},
-		{"Key e", "edit"},
-		{"Key d", "delete"},
-		{"Key /", "search"},
+		{"Key g", "Get"},
+		{"Key e", "Edit"},
+		{"Key d", "Delete"},
+		{"Key l", "Logs"},
+		{"Key x", "Exec"},
+		{"Key /", "Search"},
 	}
 
 	ViewMap = map[string]types.View{
