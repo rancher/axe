@@ -37,6 +37,7 @@ var (
 		{"Key r", "Refresh"},
 		{"Key /", "Search"},
 		{"Key p", "View Pods"},
+		{"Ket h", "Hit Endpoint"},
 	}
 
 	Footers = []types.ResourceView{
@@ -82,6 +83,8 @@ var (
 					t.Navigate(event.Rune())
 				case 'p':
 					viewPods(t)
+				case 'h':
+					hit(t)
 				}
 			}
 			return event
@@ -136,6 +139,11 @@ var (
 			Name:        "log",
 			Shortcut:    'l',
 			Description: "view logs of a service",
+		},
+		{
+			Name:        "hit",
+			Shortcut:    'h',
+			Description: "hit endpoint of a service(need jq and curl)",
 		},
 	}
 

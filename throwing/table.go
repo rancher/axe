@@ -152,7 +152,11 @@ func (t *TableView) draw() {
 	header := t.dataSource.Header()
 	data := t.dataSource.Data()
 
+	nameRow := 0
 	for col, name := range header {
+		if name == "NAME" {
+			nameRow = col
+		}
 		t.addHeaderCell(col, name)
 	}
 
@@ -161,7 +165,7 @@ func (t *TableView) draw() {
 		if len(row) > 0 && row[0] == "" {
 			continue
 		}
-		if t.search != "" && !strings.Contains(strings.Join(row, ""), t.search) {
+		if t.search != "" && !strings.Contains(row[nameRow], t.search) {
 			continue
 		}
 		for col, value := range row {
@@ -197,7 +201,7 @@ func (t *TableView) addBodyCell(row, col int, value string) {
 func (t *TableView) InsertDialog(name string, page tview.Primitive, dialog tview.Primitive) {
 	newpage := tview.NewPages()
 	newpage.AddPage(name, page, true, true).
-		AddPage("dialog", center(dialog, 40, 15), true, true)
+		AddPage("dialog", center(dialog, 50, 20), true, true)
 	t.app.SwitchPage(t.app.currentPage, newpage)
 	t.app.Application.SetFocus(dialog)
 }

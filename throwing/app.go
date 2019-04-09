@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/rancher/axe/throwing/types"
-	"github.com/sirupsen/logrus"
 	"github.com/gdamore/tcell"
+	"github.com/rancher/axe/throwing/types"
 	"github.com/rancher/axe/version"
 	"github.com/rivo/tview"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -56,7 +56,7 @@ NewAppView takes 4 parameters:
 	Drawer: Generic drawer to define how the table view looks like
 	Handler: Event handler
 	RefresherSignals: External Signal to trigger table refresh, mapped by resource kind
- */
+*/
 func NewAppView(clientset *kubernetes.Clientset, dr types.Drawer, handler EventHandler, refreshSignals map[string]chan struct{}) *AppView {
 	v := &AppView{Application: tview.NewApplication()}
 	{
@@ -211,7 +211,7 @@ func (m *menuView) init() {
 		m.Flex.SetBackgroundColor(tcell.ColorGray)
 		m.Flex.AddItem(m.logoView(), 6, 1, false)
 		m.Flex.AddItem(m.versionView(), 4, 1, false)
-		m.Flex.AddItem(m.tipsView(), 12, 1, false)
+		m.Flex.AddItem(m.tipsView(), 14, 1, false)
 		m.Flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Rune() == 'm' {
 				m.AppView.SwitchToRootPage()

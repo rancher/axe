@@ -44,6 +44,8 @@ func actionView(t *throwing.TableView) {
 			viewPods(t)
 		case "delete":
 			rm(t)
+		case "hit":
+			hit(t)
 		}
 	})
 
@@ -123,6 +125,39 @@ func inspect(format string, t *throwing.TableView) {
 	inspectBox.SetText(outBuffer.String())
 
 	newpage := tview.NewPages().AddPage("inspect", inspectBox, true, true)
+	t.SwitchPage(t.GetCurrentPage(), newpage)
+}
+
+func hit(t *throwing.TableView) {
+	endpointCol := 0
+	for i :=0 ; i < t.GetColumnCount(); i++ {
+		if strings.Contains(t.GetCell(0, i).Text, "ENDPOINT") {
+			endpointCol = i
+			break
+		}
+	}
+	row, _ := t.GetSelection()
+	endpoint := strings.Trim(t.GetCell(row, endpointCol).Text, " ")
+	if endpoint == "" {
+		return
+	}
+
+	args := []string{"-c", "curl --connect-timeout 10 -s -k " + endpoint + " | jq"}
+	b := &strings.Builder{}
+	eb := &strings.Builder{}
+	cmd := exec.Command("bash", args...)
+	cmd.Stdout = b
+	cmd.Stderr = eb
+	if err := cmd.Run(); err != nil {
+		t.UpdateStatus(eb.String(), true)
+		return
+	}
+
+	hitBox := tview.NewTextView()
+	hitBox.SetDynamicColors(true).SetBackgroundColor(defaultBackGroundColor)
+	hitBox.SetText(b.String())
+
+	newpage := tview.NewPages().AddPage("hit", hitBox, true, true)
 	t.SwitchPage(t.GetCurrentPage(), newpage)
 }
 
