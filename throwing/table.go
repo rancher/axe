@@ -2,7 +2,6 @@ package throwing
 
 import (
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
 	"time"
@@ -315,8 +314,8 @@ func (t *TableView) Navigate(r rune) {
 }
 
 func (t *TableView) RootPage() {
-	logrus.Info(t.drawer.RootPage)
 	t.SwitchPage(t.drawer.RootPage, t.app.tableViews[t.drawer.RootPage])
+	t.app.tableViews[t.drawer.RootPage].Refresh()
 }
 
 func (t *TableView) LastPage() {

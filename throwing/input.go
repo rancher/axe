@@ -15,13 +15,14 @@ var (
 		}
 	}
 
-	searchDoneEventHandler = func(app *AppView, t *TableView) func(key tcell.Key) {
+	searchDoneEventHandler = func(app *AppView) func(key tcell.Key) {
 		return func(key tcell.Key) {
 			switch key {
 			case tcell.KeyEscape:
 				app.SetFocus(app.content)
 				app.searchView.InputField.SetText("")
 			case tcell.KeyEnter:
+				t := app.tableViews[app.currentPage]
 				t.UpdateWithSearch(app.searchView.InputField.GetText())
 				app.searchView.InputField.SetText("")
 				t.Refresh()

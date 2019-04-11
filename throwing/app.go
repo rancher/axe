@@ -9,7 +9,6 @@ import (
 	"github.com/rancher/axe/throwing/types"
 	"github.com/rancher/axe/version"
 	"github.com/rivo/tview"
-	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -171,7 +170,6 @@ func (app *AppView) SwitchPage(page string, p tview.Primitive) {
 		}
 		if cp != "" {
 			go func() {
-				logrus.Info("sending")
 				app.switchPage <- struct{}{}
 			}()
 		}
@@ -276,7 +274,7 @@ type cmdView struct {
 func (s *cmdView) init() {
 	s.InputField.SetFieldBackgroundColor(tcell.ColorBlack)
 	s.InputField.SetFieldTextColor(tcell.ColorBlue)
-	s.InputField.SetDoneFunc(searchDoneEventHandler(s.AppView, s.currentPrimitive))
+	s.InputField.SetDoneFunc(searchDoneEventHandler(s.AppView))
 }
 
 type footerView struct {

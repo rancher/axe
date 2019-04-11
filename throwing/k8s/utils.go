@@ -163,13 +163,14 @@ func delete(t *throwing.TableView) {
 				} else {
 					args = []string{"delete", t.GetResourceKind(), name}
 				}
-				cmd := exec.Command("rio", args...)
+				cmd := exec.Command("kubectl", args...)
 				errB := &strings.Builder{}
 				cmd.Stderr = errB
 				if err := cmd.Run(); err != nil {
 					t.UpdateStatus(errB.String(), true)
 					return
 				}
+				t.Refresh()
 				t.SwitchToRootPage()
 			} else if buttonLabel == "Cancel" {
 				t.BackPage()
@@ -199,9 +200,13 @@ func viewResource(t *throwing.TableView) {
 	apiResource.Version = version
 	apiResource.Name = kind
 
+	withGroup := kind
+	if group != "" {
+		withGroup += "." + group
+	}
 	rkind := types.ResourceKind{
-		Title: apiResource.Name,
-		Kind:  kind,
+		Title: withGroup,
+		Kind:  withGroup,
 	}
 
 	w := wrapper{
@@ -218,5 +223,5 @@ func viewResource(t *throwing.TableView) {
 	}
 	t.SetTableView(rkind.Kind, newtable)
 
-	t.SwitchPage(apiResource.Name, newtable)
+	t.SwitchPage(rkind.Kind, newtable)
 }

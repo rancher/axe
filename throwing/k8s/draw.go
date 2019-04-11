@@ -40,7 +40,9 @@ var (
 		{"Key d", "Delete"},
 		{"Key l", "Logs"},
 		{"Key x", "Exec"},
+		{"key r", "Refresh"},
 		{"Key /", "Search"},
+		{"Key q", "quit to root page"},
 	}
 
 	ViewMap = map[string]types.View{
@@ -76,7 +78,7 @@ var (
 				}
 			case tcell.KeyRune:
 				switch event.Rune() {
-				case 'm':
+				case 'm', 'h', '?':
 					t.ShowMenu()
 				case '/':
 					t.ShowSearch()
@@ -90,23 +92,25 @@ var (
 
 	itemEventHandler = func(t *throwing.TableView) func(event *tcell.EventKey) *tcell.EventKey {
 		return func(event *tcell.EventKey) *tcell.EventKey {
-			if event.Key() == tcell.KeyCtrlQ {
+			switch event.Rune() {
+			case 'g':
+				get(t)
+			case 'e':
+				edit(t)
+			case 'd':
+				delete(t)
+			case 'x':
+				execute(t)
+			case 'l':
+				logs(t)
+			case 'm', 'h', '?':
+				t.ShowMenu()
+			case 'q':
 				t.RootPage()
-			} else {
-				switch event.Rune() {
-				case 'g':
-					get(t)
-				case 'e':
-					edit(t)
-				case 'd':
-					delete(t)
-				case 'x':
-					execute(t)
-				case 'l':
-					logs(t)
-				case 'm':
-					t.ShowMenu()
-				}
+			case 'r':
+				t.Refresh()
+			case '/':
+				t.ShowSearch()
 			}
 			return event
 		}
