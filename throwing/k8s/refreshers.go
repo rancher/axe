@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -44,12 +45,27 @@ func (w wrapper) refreshResource(b *bytes.Buffer) error {
 	if err := req.Do().Into(table); err != nil {
 		return err
 	}
+
+	namespaced := true
+	groupVersion := strings.Trim(fmt.Sprintf("%s/%s", w.group, w.version), "/")
+	resourceList, err := clientset.ServerResourcesForGroupVersion(groupVersion)
+	if err != nil {
+		return err
+	}
+	for _, r := range resourceList.APIResources {
+		if r.Name == w.name {
+			namespaced = r.Namespaced
+		}
+	}
+
 	// insert namespace
-	table.ColumnDefinitions = append([]v1beta1.TableColumnDefinition{
-		{
-			Name: "NAMESPACE",
-		},
-	}, table.ColumnDefinitions...)
+	if namespaced {
+		table.ColumnDefinitions = append([]v1beta1.TableColumnDefinition{
+			{
+				Name: "NAMESPACE",
+			},
+		}, table.ColumnDefinitions...)
+	}
 
 	for i, header := range table.ColumnDefinitions {
 		b.Write([]byte(strings.ToUpper(header.Name)))
@@ -71,7 +87,9 @@ func (w wrapper) refreshResource(b *bytes.Buffer) error {
 		if ok {
 			namespace = object.GetNamespace()
 		}
-		row.Cells = append([]interface{}{namespace}, row.Cells...)
+		if namespaced {
+			row.Cells = append([]interface{}{namespace}, row.Cells...)
+		}
 		for i, column := range row.Cells {
 			b.Write([]byte(convert.ToString(column)))
 			if i == len(row.Cells)-1 {
