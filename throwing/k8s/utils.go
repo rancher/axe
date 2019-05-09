@@ -166,10 +166,12 @@ func delete(t *throwing.TableView) {
 				cmd := exec.Command("kubectl", args...)
 				errB := &strings.Builder{}
 				cmd.Stderr = errB
-				if err := cmd.Run(); err != nil {
-					t.UpdateStatus(errB.String(), true)
-					return
-				}
+				go func() {
+					if err := cmd.Run(); err != nil {
+						t.UpdateStatus(errB.String(), true)
+						return
+					}
+				}()
 				t.Refresh()
 				t.SwitchToRootPage()
 			} else if buttonLabel == "Cancel" {
