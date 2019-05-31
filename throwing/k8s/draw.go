@@ -78,8 +78,6 @@ var (
 				}
 			case tcell.KeyRune:
 				switch event.Rune() {
-				case 'm', 'h', '?':
-					t.ShowMenu()
 				case '/':
 					t.ShowSearch()
 				case 'r':
@@ -103,8 +101,6 @@ var (
 				execute(t)
 			case 'l':
 				logs(t)
-			case 'm', 'h', '?':
-				t.ShowMenu()
 			case 'q':
 				t.RootPage()
 			case 'r':
